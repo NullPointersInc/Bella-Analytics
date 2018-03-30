@@ -5,4 +5,5 @@ from django.db import models
 class LoggedData(models.Model):
     timestamp = models.BigIntegerField()
     device = models.ForeignKey('devices.Device', on_delete=models.CASCADE)
-    value = models.IntegerField()
+    value = models.IntegerField(default=0)
+    state = models.CharField(max_length=16,default='off')

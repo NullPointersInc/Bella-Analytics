@@ -60,6 +60,12 @@ labels = {
     }
 }
 
+state_labels = {
+    0 : 'off',
+    1 : 'partial',
+    2 : 'on',
+}
+
 # Create your views here.
 
 def index(request):
@@ -81,7 +87,9 @@ def log_data(request):
 
 def attemptLogData(timestamp, device_id, value):
     try:
-        logged_data = LoggedData.objects.create(timestamp = timestamp, device_id = device_id, value = value)
+        device = get_object_or_404(Device, device_id=device_id)
+        state = state_labels(device.state)
+        logged_data = LoggedData.objects.create(timestamp = timestamp, device_id = device_id, value = value, state = state)
         logged_data.save()
         return True
     except Exception as e:
@@ -91,6 +99,8 @@ def get_device_graph(request, device_id):
     needed_logs = list(LoggedData.objects.filter(device_id=device_id).values('timestamp', 'value'))
     timestamps = [log['timestamp'] for log in needed_logs]
     values = [log['value'] for log in needed_logs]
+    if len(values) < 1:
+        return JsonResponse({'success' : False, 'msg' : 'No data to plot'})
     device_object = get_object_or_404(Device, device_id=device_id)
     device = model_to_dict(device_object)
     plt.plot(timestamps, values, label=device['nickname'])
@@ -152,8 +162,8 @@ def handle_live_data(request):
                 new_state = 0
             elif lux < min(lum[controller].values()):
                 new_state = max(lum[controller].keys())
-            elif lum_map[state] > time['L'][device_type][now_hrs]:
-                new_state = time['L'][now_hrs]
+           # elif lum_map[state] > time['L'][device_type][now_hrs]:
+            #    new_state = time['L'][now_hrs]
             else:
                 expected_lux = lum[controller][state]
                 if lux > expected_lux:
