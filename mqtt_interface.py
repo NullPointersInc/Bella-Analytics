@@ -29,7 +29,7 @@ def on_message(client, userdata, msg):
 
     elif payload[1] == "T":
         device_id = '1r' + payload[0]
-        queryUrl = "0:8000/analytics/update_success/" + device_id
+        queryUrl = "0:8000/analytics/update_success" + device_id
         r = requests.put(queryUrl)
 
         
@@ -42,3 +42,4 @@ client.username_pw_set('astr1x', password='astr1x2096')
 client.connect("192.168.43.233", 1883, 60)
 client.subscribe("bellax/ack")
 client.loop_forever()
+

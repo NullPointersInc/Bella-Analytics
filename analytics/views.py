@@ -12,7 +12,10 @@ from datetime import datetime
 import time
 
 time = {
-   ' L' : [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 1, 1],
+   ' L' : {
+       'F' : [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+       'B' : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0], 
+    }
 }
 
 
@@ -39,6 +42,11 @@ lum = {
 
 }
 
+lum_map = {
+    'F' : 1,
+    'B' : 2
+}
+
 #Labels
 labels = {
     'F' : {
@@ -46,7 +54,7 @@ labels = {
         1 : 'P',
         0 : '0',
     },
-    'T' : {
+    'B' : {
         1 : '1',
         0 : '0',
     }
@@ -136,6 +144,7 @@ def handle_live_data(request):
         #Handler for devices dependent on lux
         device_model = get_object_or_404(Device, device_id = device_id)
         device = model_to_dict(device_model)
+        device_type = device['device_type']
         controller = device['controller']
         state = device['state']
         if controller == 'L':
@@ -143,6 +152,8 @@ def handle_live_data(request):
                 new_state = 0
             elif lux < min(lum[controller].values()):
                 new_state = max(lum[controller].keys())
+            elif lum_map[state] > time['L'][device_type][now_hrs]:
+                new_state = time['L'][now_hrs]
             else:
                 expected_lux = lum[controller][state]
                 if lux > expected_lux:
@@ -151,24 +162,29 @@ def handle_live_data(request):
                     new_state = lum[controller][max(state+1, max(lum[controller].keys()))]
 
         if controller == 'T':
-            if temp > max(temp[controller].values()):
+            if temp < min(temp[controller].values()):
                 new_state = 0
-            elif temp < min(temp[controller].values()):
+            elif temp > max(temp[controller].values()):
                 new_state = max(temp[controller].keys())
             else:
                 expected_temp = temp[controller][state]
-                if temp > expected_temp:
+                if temp < expected_temp:
                     new_state =temp[controller][min(state-1, 0)]
-                elif temp < expected_temp:
+                elif temp > expected_temp:
                     new_state = temp[controller][max(state+1, max(temp[controller].keys()))]
         payload_list.append(device_id)
-        payload_list.append(state)
-        payload_list.append(new_state)
+        payload_list.append(labels[state])
+        payload_list.append(labels[new_state])
+        device_model.next_state = new_state
+        device_model.save()
 
     payload = ';'.join(payload_list)
     return JsonResponse({'success' : True, 'payload' : payload})
 
 
-    
-
+def update_success(request, device_id):
+    device = get_object_or_404(Device, device_id = device_id)
+    device.state = device.next_state
+    device.save()
+    return JsonResponse({'success' : True})
 
