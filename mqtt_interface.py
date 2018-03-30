@@ -7,7 +7,7 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     payload = msg.payload.decode("utf-8")
     if payload[0] == "S":
-        room_id = values[1]
+        room_id = payload[2]
         values = payload[2:].split(';')
         lux_value = values[:-1]
         temp_value = values[:-2]
@@ -23,7 +23,7 @@ def on_message(client, userdata, msg):
             
         r = requests.post("0:8000/analytics/log_data_live", data = requestStructure)
         response = r.json()
-        payload = respone['payload']
+        payload = response['payload']
         client.publish('bellax/ack', payload)
 
     elif payload[1] == "T":
