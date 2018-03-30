@@ -21,6 +21,7 @@ class FuzzyDevice(Device):
         (2, 'High')
     )
     state = models.IntegerField(choices = DEVICE_STATES, default=0)
+    next_state = models.IntegerField(choices = DEVICE_STATES, default=0)
     
 class BinaryDevice(Device): 
     DEVICE_STATES = (
@@ -28,4 +29,5 @@ class BinaryDevice(Device):
         (1, 'On')
     )
     state = models.IntegerField(choices = DEVICE_STATES, default=0)
+    next_state = models.IntegerField(choices = DEVICE_STATES, default=0)
 

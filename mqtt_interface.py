@@ -12,6 +12,7 @@ def on_message(client, userdata, msg):
         lux_value = values[:-1]
         temp_value = values[:-2]
         requestStructure = {
+            'room_id' : room_id,
             'lux_value' : lux_value,
             'temp_value' : temp_value,
             'devices' : [],

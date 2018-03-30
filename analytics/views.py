@@ -15,20 +15,40 @@ time = {
    ' L' : [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 1, 1],
 }
 
+
+#Set the mode to key if the corresponding controller has reading above the value
 temp = {
-    'T' : {
-        30 : 3,
-        24 : 2,
-        20 : 1,
+    'F' : {
+        2 : 30,
+        1 : 24,
+    },
+    'B' : {
+        1 : 34,
+    }
+}
+
+#Set the mode to key if the corresponding controller has reading below the value
+lum = {
+    'F' : {
+        2 : 300,
+        1 : 500,
+    },
+    'B' : {
+        1 : 500
     }
 
 }
 
-lum = {
-    'L' : {
-        300 : 2,
-        500 : 1,
-        700 : 0,
+#Labels
+labels = {
+    'F' : {
+        2 : '1',
+        1 : 'P',
+        0 : '0',
+    },
+    'T' : {
+        1 : '1',
+        0 : '0',
     }
 }
 
@@ -105,12 +125,48 @@ def get_room_graph(request, room_id):
 def handle_live_data(request):
     room_id = request['room_id']
     devices = json.load(request['devices'])
+    lux = float(request['lux_value'])
+    temp = float(request['temp_value'])
     timestamp = int(time.time())
-    for device_id, value in devices.items():
-        attemptLogData(timestamp, device_id, value)
+    payload_list = []
     now_hrs = int(datetime.fromtimestamp(timestamp).strftime('%H'))
-    
+    for device_id, value in devices.items():
+        val = float(value)
+        attemptLogData(timestamp, device_id, val)
+        #Handler for devices dependent on lux
+        device_model = get_object_or_404(Device, device_id = device_id)
+        device = model_to_dict(device_model)
+        controller = device['controller']
+        state = device['state']
+        if controller == 'L':
+            if lux > max(lum[controller].values()):
+                new_state = 0
+            elif lux < min(lum[controller].values()):
+                new_state = max(lum[controller].keys())
+            else:
+                expected_lux = lum[controller][state]
+                if lux > expected_lux:
+                    new_state = lum[controller][min(state-1, 0)]
+                elif lux < expected_lux:
+                    new_state = lum[controller][max(state+1, max(lum[controller].keys()))]
 
+        if controller == 'T':
+            if temp > max(temp[controller].values()):
+                new_state = 0
+            elif temp < min(temp[controller].values()):
+                new_state = max(temp[controller].keys())
+            else:
+                expected_temp = temp[controller][state]
+                if temp > expected_temp:
+                    new_state =temp[controller][min(state-1, 0)]
+                elif temp < expected_temp:
+                    new_state = temp[controller][max(state+1, max(temp[controller].keys()))]
+        payload_list.append(device_id)
+        payload_list.append(state)
+        payload_list.append(new_state)
+
+    payload = ';'.join(payload_list)
+    return JsonResponse({'success' : True, 'payload' : payload})
 
 
     
