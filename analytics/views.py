@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.forms.models import model_to_dict
-from .models import LoggedData
+from .models import LoggedDeviceData, LoggedRoomData
 from devices.models import Device, Room
 from django.db import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
@@ -11,22 +11,15 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import time
 
-time = {
-   ' L' : {
-       'F' : [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-       'B' : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0], 
-    }
-}
-
 
 #Set the mode to key if the corresponding controller has reading above the value
 temp = {
     'F' : {
         2 : 30,
-        1 : 24,
+        1 : 20,
     },
     'B' : {
-        1 : 34,
+        1 : 24,
     }
 }
 
@@ -34,12 +27,8 @@ temp = {
 lum = {
     'F' : {
         2 : 300,
-        1 : 500,
-    },
-    'B' : {
-        1 : 500
+        1 : 550,
     }
-
 }
 
 lum_map = {
@@ -140,11 +129,23 @@ def get_room_graph(request, room_id):
     responseStructure = {'success' : True, 'data' : image_data.decode()}
     return JsonResponse(responseStructure, safe=False)
 
+@csrf_exempt
+
 def handle_live_data(request):
-    room_id = request['room_id']
-    devices = json.load(request['devices'])
-    lux = float(request['lux_value'])
-    temp = float(request['temp_value'])
+    device_id = request.POST.get("device_id", 0)
+    lux_value = request.POST.get("lux_value", 0)
+    temp_value = request.POST.get("temp_value", 0)
+    value = request.POST.get("value", 0)
+    device = get_object_or_404(Device, device_id = device_id)
+    room_id = device.room.room_id
+
+
+
+def handle_live_data2(request):
+    room_id = request.POST['room_id']
+    devices = json.load(request.POST.get('devices', []))
+    lux = float(request.POST.get('lux_value', 0))
+    temp = float(request.POST.get('temp_value', 0))
     timestamp = int(time.time())
     payload_list = []
     now_hrs = int(datetime.fromtimestamp(timestamp).strftime('%H'))
