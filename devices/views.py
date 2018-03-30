@@ -1,5 +1,5 @@
 from django.http import HttpResponse, JsonResponse
-from .models import Device, Room
+from .models import Device, Room, BinaryDevice, FuzzyDevice
 from django.core import serializers
 from django.shortcuts import get_object_or_404
 from django.forms.models import model_to_dict
@@ -19,18 +19,25 @@ def create_device(request):
     if request.method != 'POST':
         return JsonResponse({'success' : False, 'msg' : 'Expected a POST method'})
     device_id = request.POST['device_id']
-    wattage = int(request.POST['wattage'])
     device_name = request.POST['device_name']
     nickname = request.POST['nickname']
-    usage_number = int(request.POST['usage_number'])
     room_id = request.POST['room_id']
+    controller = request.POST['controller']
+    device_type = request.POST['device_type']
+    controller = request.POST['controller']
     correspondingRoom = Room.objects.get(room_id=room_id)
     try:
-        device = Device.objects.create(device_id = device_id, name = device_name, nickname = nickname, usage_number = usage_number, wattage = wattage, room = correspondingRoom)
-        device.save()
+        if device_type == 'F':
+            device = FuzzyDevice.objects.create(device_id = device_id, name = device_name, nickname = nickname, room = correspondingRoom, controller = controller)
+            device.save()
+        else:
+            device = BinaryDevice.objects.create(device_id = device_id, name = device_name, nickname = nickname, room = correspondingRoom, controller = controller)
         responseStructure = {'success' : True, 'msg' : 'Device created successfully!'}
     except IntegrityError as e:
         responseStructure = {'success': False, 'msg' : 'Device ID already in use'}
+    except Exception as e:
+        print (e)
+        responseStructure = {'success' : False, 'msg' : 'Invalid data format'}
     return JsonResponse(responseStructure, safe=False)
 
 def get_all_devices(request, room_id):

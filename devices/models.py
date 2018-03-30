@@ -11,7 +11,21 @@ class Device(models.Model):
     device_id = models.CharField(max_length=64, primary_key=True)
     name = models.CharField(max_length=64)
     nickname = models.CharField(max_length=128)
-    usage_number = models.IntegerField() #Value between 0 and 16777215, can be used for advanced analytics
-    wattage = models.IntegerField()
     room = models.ForeignKey('Room', on_delete=models.CASCADE)
+    controller = models.CharField(max_length=1)
+
+class FuzzyDevice(Device):
+    DEVICE_STATES = (
+        (0, 'Off'),
+        (1, 'Low'),
+        (2, 'High')
+    )
+    state = models.IntegerField(choices = DEVICE_STATES, default=0)
+    
+class BinaryDevice(Device): 
+    DEVICE_STATES = (
+        (0, 'Off'),
+        (1, 'On')
+    )
+    state = models.IntegerField(choices = DEVICE_STATES, default=0)
 

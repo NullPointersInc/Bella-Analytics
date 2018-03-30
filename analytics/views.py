@@ -5,10 +5,32 @@ from .models import LoggedData
 from devices.models import Device, Room
 from django.db import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
-import matplotlib, base64, os
+import matplotlib, base64, os, json
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime
+import time
+
+time = {
+   ' L' : [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 1, 1],
+}
+
+temp = {
+    'T' : {
+        30 : 3,
+        24 : 2,
+        20 : 1,
+    }
+
+}
+
+lum = {
+    'L' : {
+        300 : 2,
+        500 : 1,
+        700 : 0,
+    }
+}
 
 # Create your views here.
 
@@ -22,13 +44,20 @@ def log_data(request):
     timestamp = int(request.POST['timestamp'])
     device_id = request.POST['device_id']
     value = int(request.POST['value'])
+    response = attemptLogData(timestamp, device_id, value)
+    if response:
+        mess = 'Log successful'
+    else:
+        mess = 'Log failed!'
+    return JsonResponse({'success' : response, 'msg' : mess})
+
+def attemptLogData(timestamp, device_id, value):
     try:
         logged_data = LoggedData.objects.create(timestamp = timestamp, device_id = device_id, value = value)
         logged_data.save()
-        responseStructure = {'success' : True, 'msg' : 'Log successful!'}
+        return True
     except Exception as e:
-        responseStructure = {'success' : False, 'msg' : 'Could not save log!'}
-    return JsonResponse(responseStructure, safe=False)
+        return False
 
 def get_device_graph(request, device_id):
     needed_logs = list(LoggedData.objects.filter(device_id=device_id).values('timestamp', 'value'))
@@ -72,5 +101,18 @@ def get_room_graph(request, room_id):
     os.remove(now + room_id + '.png')
     responseStructure = {'success' : True, 'data' : image_data.decode()}
     return JsonResponse(responseStructure, safe=False)
+
+def handle_live_data(request):
+    room_id = request['room_id']
+    devices = json.load(request['devices'])
+    timestamp = int(time.time())
+    for device_id, value in devices.items():
+        attemptLogData(timestamp, device_id, value)
+    now_hrs = int(datetime.fromtimestamp(timestamp).strftime('%H'))
+    
+
+
+
+    
 
 
