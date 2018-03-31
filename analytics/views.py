@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, JsonResponse
 from django.forms.models import model_to_dict
 from .models import LoggedDeviceData, LoggedRoomData
-from devices.models import Device, Room
+from devices.models import Device
 from django.db import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
 import matplotlib, base64, os, json
@@ -10,6 +10,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime
 import time
+import numpy as np
+from .ml import do_knn
 
 
 #Set the mode to key if the corresponding controller has reading above the value
@@ -55,6 +57,7 @@ def process(device, lux, temp, val, ts):
     state = device.state
     controller = device.controller
     device_type = device.device_type
+    old_state = device.state
     if controller == 'T':
         allowed_temp = temp[controller][state]
         maxim = max(temp[controller].keys())
@@ -73,10 +76,8 @@ def process(device, lux, temp, val, ts):
             new_state = min(state+1, maxim)
 
     elif controller == 'L':
-# Lux sensors are room-specific and encompass devices 
-        room = device.room
-        room_id = room.room_id
-        lux_devices = list(Device.objects.filter(room_id=room_id, controller='L'))
+# Lux sensors are room-specific and encompass devices
+        lux_devices = list(Device.objects.filter(controller='L'))
 # Bulbs are binary and activate at 2, ambients are 1 territory
         if lux < lum[2]:
             new_state = 2
@@ -85,11 +86,15 @@ def process(device, lux, temp, val, ts):
         else:
             new_state = 0
 
-    if state == new_state:
-        return None 
+#H:3 if device 3 is high, L:3 if device 3 is low
+    device_id = device.device_id
+    if new_state > old_state:
+        new_str = 'L'
+    elif new_state < old_state:
+        new_str = 'H'
     else:
-        device.next_state = (0 if new_state == 1 and device.device_type == 'B' and device.controller == 'L' else new_state) 
-        return (str(device.device_id) + ';' + str(state) + ';' + str(new_state))
+        new_str='X'
+    return (str(device_id) + ':' + new_str)
 
 
 # Create your views here.
@@ -111,6 +116,47 @@ def log_data(request):
         mess = 'Log failed!'
     return JsonResponse({'success' : response, 'msg' : mess})
 
+def avg(lst):
+    return sum(lst)/len(lst)
+
+def get_last_turn_on(lst):
+    x = len(lst) - 1
+    if lst[x] < 0.4:
+        return x
+    x -=1
+    while x >= 0:
+        if lst[x] < 0.4:
+            break
+    return x+1
+
+def get_stats(request):
+    device_objs = list(Device.objects.all())
+    devices = [model_to_dict(device) for device in device_objs]
+    for device in devices:
+        #current_usage
+        #active_since
+        #assisted_triggers
+        #power consumed
+        needed_log_objs = list(LoggedDeviceData.objects.filter(device = device_objs[devices.index(device)]))
+        needed_logs = [model_to_dict(log) for log in needed_log_objs]
+        amps = [ x['value'] for x in needed_logs ]
+        latest_slice = get_last_turn_on(amps)
+        tstamps = [ x['timestamp'] for x in needed_logs ]
+        assisted_triggers = len(needed_logs)//2
+        avg_current_use = avg(amps)
+        active_since = tstamps[latest_slice]
+        total_power_consumed = sum(amps)*0.23
+
+        device['stats'] = {
+            'current' : avg_current_use,
+            'active_since' : active_since,
+            'power_consumed' : total_power_consumed,
+            'assisted_triggers' : assisted_triggers,
+        }
+    return JsonResponse({'success' : True, 'data' : devices})
+
+
+'''
 def attemptLogData(timestamp, device_id, value):
     try:
         device = get_object_or_404(Device, device_id=device_id)
@@ -120,14 +166,15 @@ def attemptLogData(timestamp, device_id, value):
         return True
     except Exception as e:
         return False
-
+'''
 def get_device_graph(request, device_id):
-    needed_logs = list(LoggedData.objects.filter(device_id=device_id).values('timestamp', 'value'))
+    device_object = get_object_or_404(Device, device_id=device_id)
+    needed_logs = list(LoggedDeviceData.objects.filter(device=device_object).values('timestamp', 'value'))
     timestamps = [log['timestamp'] for log in needed_logs]
     values = [log['value'] for log in needed_logs]
     if len(values) < 1:
         return JsonResponse({'success' : False, 'msg' : 'No data to plot'})
-    device_object = get_object_or_404(Device, device_id=device_id)
+
     device = model_to_dict(device_object)
     plt.plot(timestamps, values, label=device['nickname'])
     plt.xlabel('Timestamps')
@@ -139,18 +186,18 @@ def get_device_graph(request, device_id):
     with open(now + device_id + '.png', 'rb') as f:
         data = f.read()
     image_data = base64.encodestring(data)
-    os.remove(now + device_id + '.png')
+    #os.remove(now + device_id + '.png')
     responseStructure = {'success' : True, 'data' : image_data.decode()}
     return JsonResponse(responseStructure, safe=False)
 
 def get_room_graph(request, room_id):
     room = get_object_or_404(Room, room_id=room_id)
     devices = list(Device.objects.filter(room=room).values('device_id'))
-    for dev in devices:    
-        needed_logs = list(LoggedData.objects.filter(device_id=dev['device_id']).values('timestamp', 'value'))
+    for dev in devices:
+        device_object = get_object_or_404(Device, device_id=dev['device_id'])
+        needed_logs = list(LoggedDeviceData.objects.filter(device=device_object).values('timestamp', 'value'))
         timestamps = [log['timestamp'] for log in needed_logs]
         values = [log['value'] for log in needed_logs]
-        device_object = get_object_or_404(Device, device_id=dev['device_id'])
         device = model_to_dict(device_object)
         plt.plot(timestamps, values, label=device['nickname'])
     plt.xlabel('Timestamps')
@@ -162,30 +209,69 @@ def get_room_graph(request, room_id):
     with open(now + room_id + '.png', 'rb') as f:
         data = f.read()
     image_data = base64.encodestring(data)
-    os.remove(now + room_id + '.png')
+    #os.remove(now + room_id + '.png')
     responseStructure = {'success' : True, 'data' : image_data.decode()}
     return JsonResponse(responseStructure, safe=False)
 
 @csrf_exempt
 
 def handle_live_data(request):
-    device_id = request.POST.get("device_id", 0)
-    lux_value = request.POST.get("lux_value", 0)
-    temp_value = request.POST.get("temp_value", 0)
-    value = request.POST.get("value", 0)
-    device = get_object_or_404(Device, device_id = device_id)
-    room_id = device.room.room_id
-    now = int(time.time())
+    lum_max = 950
+
+    hum_value = request.POST.get("hum_value", 0)
+    lux_value = float(request.POST.get("lux_value", 0))
+    temp_value = float(request.POST.get("temp_value", 0))
+    timestamp = float(request.POST.get("timestamp", 0))
+    lum_devices = list(Device.objects.filter(controller = 'L'))
+    returnableStringList = []
+    for device in lum_devices:
+        usage = device.mean_usage*device.state + np.random.normal(loc=0.2, scale=0.01)
+        ldd = LoggedDeviceData(timestamp = timestamp, device = device, value = usage, state = device.state)
+        ldd.save()
+        payload = process(device, lux_value, temp_value, usage, timestamp)
+        if payload.find("X") == -1:
+            returnableStringList.append(payload)
+
+    temp_devices = list(Device.objects.filter(controller = 'T'))
+    for device in temp_devices:
+        usage = device.mean_usage*device.state + np.random.normal(loc=0.2, scale=0.01)
+        ldd = LoggedDeviceData(timestamp = timestamp, device = device, value = usage, state = device.state)
+        ldd.save()
+        payload = process(device, lux_value, temp_value, usage, timestamp)
+        if payload.find("X") == -1:
+            returnableStringList.append(payload)
+
+    hum_devices = list(Device.objects.filter(controller = 'H'))
+    for device in hum_devices:
+        usage = device.mean_usage*device.state + np.random.normal(loc=0.2, scale=0.01)
+        ldd = LoggedDeviceData(timestamp = timestamp, device = device, value = usage, state = device.state)
+        ldd.save()
+        payload = process(device, lux_value, temp_value, usage, timestamp)
+        if payload.find("X") == -1:
+            returnableStringList.append(payload)
+
+
+
+
 
 # Log values for device only
-    ldd = LoggedDeviceData(timestamp = now, device = device_id, value = value, state = device.state)
-    ldd.save()
-    nearby_lrds = LoggedRoomData.objects.filter(timestamp__gte=now-10)
-    if nearby_lrds.count < 1:
-        lrd = LoggedRoomData(room_id = room_id, lux_value = lux_value, temp_value = temp_value)
+    nearby_lrds = LoggedRoomData.objects.filter(timestamp__gte=timestamp-10)
+    if nearby_lrds.count() < 1:
+        lrd = LoggedRoomData(timestamp = timestamp, lux_value = lux_value, temp_value = temp_value, hum_value = hum_value)
         lrd.save()
-    payload = process(device, lux_value, temp_value, temp, now)
-    return JsonResponse({'success' : True, 'payload' : payload})
+    returnableString = ':'.join(returnableStringList)
+    return JsonResponse({'success' : True, 'payload' : returnableString})
+
+
+def perform_anomaly_detection(request):
+    devices = list(Device.objects.all())
+    accuracies = {}
+    for device in devices:
+        accuracy = do_knn(device.device_id)
+        accuracies[device.device_id] = accuracy
+    return JsonResponse({'success' : True, 'data' : accuracies})
+
+
 
 
 
@@ -246,4 +332,3 @@ def update_success(request, device_id):
     device.state = device.next_state
     device.save()
     return JsonResponse({'success' : True})
-

@@ -10,5 +10,6 @@ class LoggedDeviceData(models.Model):
 
 class LoggedRoomData(models.Model):
     timestamp = models.BigIntegerField()
-    room = models.ForeignKey('devices.Room', on_delete=models.CASCADE)
-    value = models.IntegerField(default=0)
+    hum_value = models.FloatField(default=0)
+    temp_value = models.FloatField(default=0)
+    lux_value = models.FloatField(default=0)
