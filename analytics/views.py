@@ -25,16 +25,10 @@ temp = {
 
 #Set the mode to key if the corresponding controller has reading below the value
 lum = {
-    'F' : {
         2 : 300,
         1 : 550,
     }
-}
 
-lum_map = {
-    'F' : 1,
-    'B' : 2
-}
 
 #Labels
 labels = {
@@ -54,6 +48,49 @@ state_labels = {
     1 : 'partial',
     2 : 'on',
 }
+
+# Helper functions
+
+def process(device, lux, temp, val, ts):
+    state = device.state
+    controller = device.controller
+    device_type = device.device_type
+    if controller == 'T':
+        allowed_temp = temp[controller][state]
+        maxim = max(temp[controller].keys())
+        minim = min(temp[controller].keys()) - 1
+        new_state = state
+# If temperature is greater than the maximum defined temperature
+        if temp > temp[controller][maxim]:
+            new_state = maxim
+# If temperature is lesser than the minimum defined temperature
+        elif temp < temp[controller][1]:
+            new_state = 0
+# Somewhere in the middle
+        elif temp < allowed_temp:
+            new_state = max(state-1, minim)
+        elif temp > allowed_temp:
+            new_state = min(state+1, maxim)
+
+    elif controller == 'L':
+# Lux sensors are room-specific and encompass devices 
+        room = device.room
+        room_id = room.room_id
+        lux_devices = list(Device.objects.filter(room_id=room_id, controller='L'))
+# Bulbs are binary and activate at 2, ambients are 1 territory
+        if lux < lum[2]:
+            new_state = 2
+        elif lux < lum[1]:
+            new_state = 1
+        else:
+            new_state = 0
+
+    if state == new_state:
+        return None 
+    else:
+        device.next_state = (0 if new_state == 1 and device.device_type == 'B' and device.controller == 'L' else new_state) 
+        return (str(device.device_id) + ';' + str(state) + ';' + str(new_state))
+
 
 # Create your views here.
 
@@ -138,6 +175,17 @@ def handle_live_data(request):
     value = request.POST.get("value", 0)
     device = get_object_or_404(Device, device_id = device_id)
     room_id = device.room.room_id
+    now = int(time.time())
+
+# Log values for device only
+    ldd = LoggedDeviceData(timestamp = now, device = device_id, value = value, state = device.state)
+    ldd.save()
+    nearby_lrds = LoggedRoomData.objects.filter(timestamp__gte=now-10)
+    if nearby_lrds.count < 1:
+        lrd = LoggedRoomData(room_id = room_id, lux_value = lux_value, temp_value = temp_value)
+        lrd.save()
+    payload = process(device, lux_value, temp_value, temp, now)
+    return JsonResponse({'success' : True, 'payload' : payload})
 
 
 

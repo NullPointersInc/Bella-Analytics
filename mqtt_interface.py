@@ -12,13 +12,12 @@ def on_message(client, userdata, msg):
     values = payload.split(';')
     device_id = values[1]
     device_value = values[2]
-    value_type = values[3]
+    value_type = values[-1]
     if value_type == 'A':
         flags[0] = device_value
-    elif value_type == 'T':
+    elif value_type == 'M':
         flags[1] = device_value
-    else:
-        flags[2] = device_value
+        flags[2] = values[3]
 
     if False not in flags:
         requestStructure = {

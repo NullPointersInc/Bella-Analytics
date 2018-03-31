@@ -13,6 +13,7 @@ class Device(models.Model):
     nickname = models.CharField(max_length=128)
     room = models.ForeignKey('Room', on_delete=models.CASCADE)
     controller = models.CharField(max_length=1)
+    device_type = models.CharField(max_length=1)
 
 class FuzzyDevice(Device):
     DEVICE_STATES = (
@@ -22,6 +23,10 @@ class FuzzyDevice(Device):
     )
     state = models.IntegerField(choices = DEVICE_STATES, default=0)
     next_state = models.IntegerField(choices = DEVICE_STATES, default=0)
+
+    def save(self, *args, **kwargs):
+        self.device_type = 'F'
+        super().save(self, *args, **kwargs)
     
 class BinaryDevice(Device): 
     DEVICE_STATES = (
@@ -30,4 +35,8 @@ class BinaryDevice(Device):
     )
     state = models.IntegerField(choices = DEVICE_STATES, default=0)
     next_state = models.IntegerField(choices = DEVICE_STATES, default=0)
+
+    def save(self, *args, **kwargs):
+        self.device_type = 'B'
+        super().save(self, *args, **kwargs)
 
